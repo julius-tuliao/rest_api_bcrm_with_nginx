@@ -30,16 +30,29 @@ db_user = os.getenv("DATABASE_USER")
 db_password = os.getenv("DATABASE_PASSWORD")
 
 
-connection=psycopg2.connect(
-    host=db_host,
-    database=db_name,
-    user=db_user,
-    password=db_password)
 
+
+
+def connect__to_database():
+    
+    connection = None
+    
+    try:
+        connection=psycopg2.connect(
+        host=db_host,
+        database=db_name,
+        user=db_user,
+        password=db_password)
+        return connection 
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+    return False
 
 def token_required(f):
    @wraps(f)
    def decorator(*args, **kwargs):
+
+    connection = connect__to_database()
 
     token = None
 
@@ -71,6 +84,8 @@ def login_user():
  
   auth = request.authorization   
 
+  connection = connect__to_database()
+
   if not auth or not auth.username or not auth.password:  
      return make_response('could not verify', 401, {'WWW.Authentication': 'Basic realm: "login required"'})    
 
@@ -100,6 +115,8 @@ def signup_user(current_user):
  hashed_password = generate_password_hash(data['password'], method='sha256')
  name = data["name"]
  
+ connection = connect__to_database()
+
  with connection:
 
         with connection.cursor() as cursor:
@@ -113,6 +130,8 @@ def signup_user(current_user):
 @token_required
 def create_status(current_user):
     data = request.get_json()
+
+    connection = connect__to_database()
 
     try:
         address = data["address"]
