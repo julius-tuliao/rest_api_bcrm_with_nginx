@@ -8,3 +8,7 @@ Web Server Gateway Interface
 Figure 1 shows the Architecture for REST API. in this instead of exposing the REST API directly to the client we are using ngnix server which serves the requests at port 80. we are using wsgi which will create multiple instance of your Flask API and host it on different Port.it will create instance of your API on Port X ... Port Y
 
 load balancing will make sure to route the traffic to the necessary Port based on round robin algorithms
+
+Based on:
+
+https://www.linkedin.com/pulse/developing-backend-rest-api-using-flask-ngnix-wsgi-load-soumil-shah/?trackingId=PuSE5A8YRzeJW3brOpMmKg%3D%3D
