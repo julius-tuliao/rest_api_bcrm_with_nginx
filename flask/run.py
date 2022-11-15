@@ -33,7 +33,7 @@ db_password = os.getenv("DATABASE_PASSWORD")
 
 
 
-def connect__to_database():
+def connect_to_database():
     
     connection = None
     
@@ -52,7 +52,7 @@ def token_required(f):
    @wraps(f)
    def decorator(*args, **kwargs):
 
-    connection = connect__to_database()
+    connection = connect_to_database()
 
     token = None
 
@@ -84,7 +84,7 @@ def login_user():
  
   auth = request.authorization   
 
-  connection = connect__to_database()
+  connection = connect_to_database()
 
   if not auth or not auth.username or not auth.password:  
      return make_response('could not verify', 401, {'WWW.Authentication': 'Basic realm: "login required"'})    
@@ -115,7 +115,7 @@ def signup_user(current_user):
  hashed_password = generate_password_hash(data['password'], method='sha256')
  name = data["name"]
  
- connection = connect__to_database()
+ connection = connect_to_database()
 
  with connection:
 
@@ -131,7 +131,7 @@ def signup_user(current_user):
 def create_status(current_user):
     data = request.get_json()
 
-    connection = connect__to_database()
+    connection = connect_to_database()
 
     try:
         address = data["address"]
