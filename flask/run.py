@@ -11,7 +11,7 @@ from flask import Flask,request, jsonify, make_response
 
 load_dotenv()
 
-INSERT_STATUS_RETURN_ID = "INSERT INTO leads_result (leads_result_lead,leads_result_address,leads_result_contact,leads_result_source,leads_result_sdate,leads_result_edate,leads_result_amount,leads_result_ornumber,leads_result_comment,leads_result_users,leads_result_status_id,leads_result_substatus_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING leads_result_id;"
+INSERT_STATUS_RETURN_ID = "INSERT INTO leads_result (leads_result_lead,leads_result_address,leads_result_contact,leads_result_source,leads_result_sdate,leads_result_edate,leads_result_amount,leads_result_ornumber,leads_result_comment,leads_result_users,leads_result_status_id,leads_result_substatus_id,leads_result_barcode_date) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING leads_result_id;"
 REGISTER_USER_RETURN_ID = "INSERT INTO api_users(public_id,name,password) VALUES (%s,%s,%s) RETURNING ID;"
 SELECT_USER_RETURN_ID= "SELECT * FROM api_users WHERE public_id = (%s) LIMIT 1"
 SELECT_USER_BY_USER_AND_PASS = "SELECT * FROM api_users WHERE name = (%s)  LIMIT 1"
@@ -146,7 +146,8 @@ def create_status(current_user):
         agent = data["agent"]
         disposition_class = data["disposition_class"]
         disposition_code = data["disposition_code"]
-
+        barcode_date_with_tz = datetime.datetime.utcnow()
+        barcode_date = barcode_date_with_tz.replace(tzinfo=None)
         with connection:
 
             with connection.cursor() as cursor:
@@ -188,7 +189,7 @@ def create_status(current_user):
                     return {"error": "Sub Status Does Not Exist"},404
 
                 
-                cursor.execute(INSERT_STATUS_RETURN_ID,(leads_id,address,contact,source,start_date,end_date,amount,or_number,comment,agent_id,leads_status_id,leads_substatus_id))           
+                cursor.execute(INSERT_STATUS_RETURN_ID,(leads_id,address,contact,source,start_date,end_date,amount,or_number,comment,agent_id,leads_status_id,leads_substatus_id,barcode_date))           
                 row = cursor.fetchone()
                 if row != None:
                     result_id = row[0]
