@@ -31,8 +31,6 @@ db_password = os.getenv("DATABASE_PASSWORD")
 
 
 
-
-
 def connect_to_database():
     
     connection = None
@@ -100,7 +98,7 @@ def login_user():
      
   if check_password_hash(user[3], auth.password):  
      
-     token = jwt.encode({'public_id': user[1], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)}, app.config['SECRET_KEY'])  
+     token = jwt.encode({'public_id': user[1], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=300)}, app.config['SECRET_KEY'])  
      
      return jsonify({'token' : token}) 
 
