@@ -70,7 +70,7 @@ def token_required(f):
 
     except Exception as ex:
          print(ex)
-         return jsonify({'message': 'token is invalid'},400)
+         return {'message': 'token is invalid'},498
 
     return f(current_user, *args, **kwargs)
 
