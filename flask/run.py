@@ -21,6 +21,8 @@ SELECT_SUBSTATUS_RETURN_ID = "SELECT leads_substatus_id FROM leads_substatus WHE
 SELECT_AGENT_RETURN_ID = "SELECT users_id FROM users WHERE users_username = (%s) ORDER BY users_id DESC LIMIT 1  "
 
 app = Flask(__name__)
+port = 5000 
+
 
 app.config['SECRET_KEY']=os.getenv("SECRET_KEY")
 
@@ -206,5 +208,5 @@ def create_status(current_user):
 
 if __name__ == ('__main__'):
 
-    app.run(host='0.0.0.0')
+    app.run(host='0.0.0.0', port=port)
 
