@@ -143,10 +143,20 @@ def create_status(current_user):
         or_number = data["or_number"]
         comment = data["comment"]
         agent = data["agent"]
-        disposition_class = data["disposition_class"]
-        disposition_code = data["disposition_code"]
+        disposition_class = data["disposition_class"].split('-')[0].strip()
+        disposition_code = data["disposition_code"].split('-')[0].strip()
         barcode_date_with_tz = datetime.datetime.utcnow()
         barcode_date = barcode_date_with_tz.replace(tzinfo=None)
+
+        if(len(start_date) < 3):
+            start_date = None
+
+        if(len(end_date) < 3):
+            end_date = None
+
+        if(len(amount) < 2):
+            amount = 0
+
         with connection:
 
             with connection.cursor() as cursor:
