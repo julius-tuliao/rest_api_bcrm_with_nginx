@@ -22,6 +22,7 @@ SELECT_AGENT_RETURN_ID = "SELECT users_id FROM users WHERE users_username = (%s)
 
 app = Flask(__name__)
 
+
 app.config['SECRET_KEY']=os.getenv("SECRET_KEY")
 
 db_host = os.getenv("DATABASE_HOST")
@@ -58,7 +59,7 @@ def token_required(f):
         token = request.headers['x-access-tokens']
 
     if not token:
-        return jsonify({'message': 'a valid token is missing'})
+        return {'message': 'a valid token is missing'},498
 
     try:
          data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
@@ -70,7 +71,7 @@ def token_required(f):
 
     except Exception as ex:
          print(ex)
-         return jsonify({'message': 'token is invalid'})
+         return {'message': 'token is invalid'},498
 
     return f(current_user, *args, **kwargs)
 
@@ -142,10 +143,20 @@ def create_status(current_user):
         or_number = data["or_number"]
         comment = data["comment"]
         agent = data["agent"]
-        disposition_class = data["disposition_class"]
-        disposition_code = data["disposition_code"]
+        disposition_class = data["disposition_class"].split('-')[0].strip()
+        disposition_code = data["disposition_code"].split('-')[0].strip()
         barcode_date_with_tz = datetime.datetime.utcnow()
         barcode_date = barcode_date_with_tz.replace(tzinfo=None)
+
+        if(len(start_date) < 3):
+            start_date = None
+
+        if(len(end_date) < 3):
+            end_date = None
+
+        if(len(amount) < 2):
+            amount = 0
+
         with connection:
 
             with connection.cursor() as cursor:
