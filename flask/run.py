@@ -100,7 +100,6 @@ SELECT_FIELD_SUB_STATUS_OPTIONS = "SELECT field_sub_statuses_id, field_sub_statu
 SELECT_BCRM_USERS_OPTIONS = "SELECT users_id,users_username,users_name,user_global_id FROM users WHERE users_deleted = 0"
 
 app = Flask(__name__)
-port = 5000 
 
 
 app.config['SECRET_KEY']=os.getenv("SECRET_KEY")
@@ -139,7 +138,7 @@ def token_required(f):
         token = request.headers['x-access-tokens']
 
     if not token:
-        return jsonify({'message': 'a valid token is missing'})
+        return {'message': 'a valid token is missing'},498
 
     try:
          data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
@@ -223,10 +222,20 @@ def create_status(current_user):
         or_number = data["or_number"]
         comment = data["comment"]
         agent = data["agent"]
-        disposition_class = data["disposition_class"]
-        disposition_code = data["disposition_code"]
+        disposition_class = data["disposition_class"].split('-')[0].strip()
+        disposition_code = data["disposition_code"].split('-')[0].strip()
         barcode_date_with_tz = datetime.datetime.utcnow()
         barcode_date = barcode_date_with_tz.replace(tzinfo=None)
+
+        if(len(start_date) < 3):
+            start_date = None
+
+        if(len(end_date) < 3):
+            end_date = None
+
+        if(len(amount) < 2):
+            amount = 0
+
         with connection:
 
             with connection.cursor() as cursor:
@@ -540,5 +549,5 @@ def bcrm_users_options(current_user):
 
 if __name__ == ('__main__'):
 
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0')
 
