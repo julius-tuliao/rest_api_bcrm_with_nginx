@@ -29,30 +29,30 @@ SELECT_STATUS_RETURN_ID = "SELECT leads_status_id FROM leads_status WHERE leads_
 SELECT_SUBSTATUS_RETURN_ID = "SELECT leads_substatus_id FROM leads_substatus WHERE leads_substatus_status_id = (%s) AND leads_substatus_name = (%s) AND leads_substatus_deleted = 0 LIMIT 1"
 SELECT_AGENT_RETURN_ID = "SELECT users_id FROM users WHERE users_username = (%s) ORDER BY users_id DESC LIMIT 1  "
 INSERT_FIELD_STATUS_RETURN_ID  = "INSERT INTO nestform (chcode,reference,bank,status,json_data,area,field_name,date_created) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id;"
-
+SELECT_RDS_DATABASE_RETURN_RDS = "SELECT rds_db_name FROM campaigns WHERE campaign_id = (%s) LIMIT 1"
 app = Flask(__name__)
 
 
 app.config['SECRET_KEY']=os.getenv("SECRET_KEY")
 
-db_host = os.getenv("RDS_DATABASE_HOST")
-db_name = os.getenv("RDS_DATABASE_NAME")
-db_user = os.getenv("RDS_DATABASE_USER")
-db_password = os.getenv("RDS_DATABASE_PASSWORD")
+main_db_host = os.getenv("RDS_DATABASE_HOST")
+main_db_name = os.getenv("RDS_DATABASE_NAME")
+main_db_user = os.getenv("RDS_DATABASE_USER")
+main_db_password = os.getenv("RDS_DATABASE_PASSWORD")
 
  
 # Create a connection pool
 pool = ThreadedConnectionPool(
     minconn=1,  # minimum number of connections in the pool
     maxconn=20,  # maximum number of connections in the pool
-    host=db_host,
-    database=db_name,
-    user=db_user,
-    password=db_password
+    host=main_db_host,
+    database=main_db_name,
+    user=main_db_user,
+    password=main_db_password
 )
 
 
-def connect_to_database():
+def connect_to_main_database():
     global pool
     # Check if the connection pool has been closed
     if pool.closed:
@@ -62,11 +62,32 @@ def connect_to_database():
         pool = ThreadedConnectionPool(
             minconn=1,  # minimum number of connections in the pool
             maxconn=20,  # maximum number of connections in the pool
-            host=db_host,
+            host=main_db_host,
+            database=main_db_name,
+            user=main_db_user,
+            password=main_db_password
+       )
+
+    # Get a connection from the pool
+    connection = pool.getconn()
+        
+    return connection
+
+def connect_to_bank_database(db_name):
+    global pool
+    # Check if the connection pool has been closed
+    if pool.closed:
+
+        print("test")
+        # Recreate the connection pool
+        pool = ThreadedConnectionPool(
+            minconn=1,  # minimum number of connections in the pool
+            maxconn=20,  # maximum number of connections in the pool
+            host=main_db_host,
             database=db_name,
-            user=db_user,
-            password=db_password
-        )
+            user=main_db_user,
+            password=main_db_password
+       )
 
     # Get a connection from the pool
     connection = pool.getconn()
@@ -77,7 +98,7 @@ def token_required(f):
    @wraps(f)
    def decorator(*args, **kwargs):
 
-    connection = connect_to_database()
+    connection = connect_to_main_database()
 
     token = None
 
@@ -166,7 +187,7 @@ def login_user():
  
   auth = request.authorization   
 
-  connection = connect_to_database()
+  connection = connect_to_main_database()
 
   if not auth or not auth.username or not auth.password:  
      return make_response('could not verify', 401, {'WWW.Authentication': 'Basic realm: "login required"'})    
@@ -202,7 +223,7 @@ def signup_user(current_user):
  name = data["name"]
  role = data["role"]
  
- connection = connect_to_database()
+ connection = connect_to_main_database()
 
  with connection:
 
@@ -236,7 +257,7 @@ def get_accounts():
 def create_status(current_user):
     data = request.get_json()
 
-    connection = connect_to_database()
+    main_db_connection = connect_to_main_database()
 
     try:
         address = data["address"]
@@ -253,6 +274,8 @@ def create_status(current_user):
         disposition_code = data["disposition_code"].split('-')[0].strip()
         barcode_date_with_tz = datetime.datetime.utcnow()
         barcode_date = barcode_date_with_tz.replace(tzinfo=None)
+        campaign = data["campaign"]
+
 
         if(len(start_date) < 3):
             start_date = None
@@ -262,6 +285,27 @@ def create_status(current_user):
 
         if(len(amount) < 2):
             amount = 0
+
+        with main_db_connection:
+
+            with main_db_connection.cursor() as cursor:
+
+                 # Find Database
+                cursor.execute(SELECT_RDS_DATABASE_RETURN_RDS,(campaign,))
+                row = cursor.fetchone()
+                if row != None:
+                    
+                    bank_db = row[0]
+                                
+                else:   
+                    pool.putconn(main_db_connection)
+  
+                    return {"error": "Client Does Not Exist"},404
+                    
+
+
+
+        connection = connect_to_bank_database(bank_db)
 
         with connection:
 
@@ -333,14 +377,13 @@ def create_status(current_user):
         return {"error": f"{ex}"},400
 
 
-
 @app.route('/api/field_status', methods=['POST'])
 @token_required
 @field_required
 def create_field_status(current_user):
     data = request.get_json()
 
-    connection = connect_to_database()
+    connection = connect_to_main_database()
 
     try:
         ch_code = data["chcode"]
@@ -384,7 +427,7 @@ def create_field_status(current_user):
 def create_agent(current_user):
     data = request.get_json()
 
-    connection = connect_to_database()
+    connection = connect_to_main_database()
 
     try:
         address = data["address"]
@@ -438,8 +481,6 @@ def create_agent(current_user):
         pool.putconn(connection)
 
         return {"error": f"{ex}"},400
-
-
 
 
 if __name__ == ('__main__'):
