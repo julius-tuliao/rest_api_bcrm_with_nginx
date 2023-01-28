@@ -9,7 +9,7 @@ import dotenv
 from flask import Flask,request, jsonify, make_response
 from etl_upsert import ETL
 from psycopg2.pool import ThreadedConnectionPool
-
+from security import admin_required,account_etl_required,field_required,agent_status_required,itd_required
 
 #  Role ID Level
 #  admin = 1
@@ -40,59 +40,58 @@ main_db_name = os.getenv("RDS_DATABASE_NAME")
 main_db_user = os.getenv("RDS_DATABASE_USER")
 main_db_password = os.getenv("RDS_DATABASE_PASSWORD")
 
- 
-# Create a connection pool
-pool = ThreadedConnectionPool(
-    minconn=1,  # minimum number of connections in the pool
-    maxconn=20,  # maximum number of connections in the pool
-    host=main_db_host,
-    database=main_db_name,
-    user=main_db_user,
-    password=main_db_password
-)
+pif_db_name = os.getenv("PIF_DATABASE_NAME")
+
+global main_pool, pif_pool
+
+def create_connection_pool(dbname):
+    return ThreadedConnectionPool(
+        minconn=1,
+        maxconn=20,
+        host=main_db_host,
+        database=dbname,
+        user=main_db_user,
+        password=main_db_password
+    )
+
+
+# connections keep alive
+main_pool = create_connection_pool(main_db_name)
+pif_pool = create_connection_pool(pif_db_name)
 
 
 def connect_to_main_database():
-    global pool
-    # Check if the connection pool has been closed
-    if pool.closed:
-
-        print("test")
-        # Recreate the connection pool
-        pool = ThreadedConnectionPool(
-            minconn=1,  # minimum number of connections in the pool
-            maxconn=20,  # maximum number of connections in the pool
-            host=main_db_host,
-            database=main_db_name,
-            user=main_db_user,
-            password=main_db_password
-       )
-
-    # Get a connection from the pool
-    connection = pool.getconn()
-        
+    connection = main_pool.getconn()
     return connection
 
-def connect_to_bank_database(db_name):
-    global pool
-    # Check if the connection pool has been closed
-    if pool.closed:
+def identify_connection(bank_db):
 
-        print("test")
+    if(bank_db == "spm_pif"):
+
+        connection = pif_pool.getconn()
+
+
+    return connection
+    
+
+def connect_to_bank_database(bank_db):
+    
+
+    try:
+
         # Recreate the connection pool
-        pool = ThreadedConnectionPool(
-            minconn=1,  # minimum number of connections in the pool
-            maxconn=20,  # maximum number of connections in the pool
+        bank_pool =  psycopg2.connect(  
             host=main_db_host,
-            database=db_name,
+            database=bank_db,
             user=main_db_user,
             password=main_db_password
-       )
+        )
+            
+        return bank_pool
 
-    # Get a connection from the pool
-    connection = pool.getconn()
-        
-    return connection
+    except Exception as e:
+        print("Error connecting to database: ", e)
+        return None
 
 def token_required(f):
    @wraps(f)
@@ -119,11 +118,11 @@ def token_required(f):
                  # Add the user's role to the decoded token data
                 data[5] = current_user[5]
             
-         pool.putconn(connection)
+         main_pool.putconn(connection)
   
 
     except Exception as ex:
-         pool.putconn(connection)
+         main_pool.putconn(connection)
   
          print(ex)
          return {'message': 'token is invalid'},498
@@ -132,55 +131,6 @@ def token_required(f):
 
    return decorator
 
-def admin_required(f):
-    @wraps(f)
-    def decorator(data, *args, **kwargs):
-        
-        #check if admin user
-        if data[5] != 1:
-            return {"message": "admin privileges are required"}, 403
-        return f(data, *args, **kwargs)
-    return decorator
-
-def account_etl_required(f):
-    @wraps(f)
-    def decorator(data, *args, **kwargs):
-        
-        #check if etl user
-        if data[5] != 2:
-            return {"message": "Account ETL privileges are required"}, 403
-        return f(data, *args, **kwargs)
-    return decorator
-
-def field_required(f):
-    @wraps(f)
-    def decorator(data, *args, **kwargs):
-        
-        #check if field user
-        if data[5] != 3:
-            return {"message": "Field privileges are required"}, 403
-        return f(data, *args, **kwargs)
-    return decorator
-
-def agent_status_required(f):
-    @wraps(f)
-    def decorator(data, *args, **kwargs):
-        
-        #check if field user
-        if data[5] != 4:
-            return {"message": "Agent status privileges are required"}, 403
-        return f(data, *args, **kwargs)
-    return decorator
-
-def itd_required(f):
-    @wraps(f)
-    def decorator(data, *args, **kwargs):
-        
-        #check if itd user
-        if data[5] != 5:
-            return {"message": "ITD privileges are required"}, 403
-        return f(data, *args, **kwargs)
-    return decorator
 
 @app.route('/login', methods=['GET', 'POST'])  
 def login_user(): 
@@ -200,7 +150,7 @@ def login_user():
                 user = cursor.fetchone()
 
 
-  pool.putconn(connection)
+  main_pool.putconn(connection)
                
                 
     
@@ -223,15 +173,15 @@ def signup_user(current_user):
  name = data["name"]
  role = data["role"]
  
- connection = connect_to_main_database()
+ main_db_connection = connect_to_main_database()
 
- with connection:
+ with main_db_connection:
 
-        with connection.cursor() as cursor:
+        with main_db_connection.cursor() as cursor:
             cursor.execute(REGISTER_USER_RETURN_ID,(str(uuid.uuid4()), name, hashed_password,role,))
             user_id = cursor.fetchone()[0]
   
- pool.putconn(connection)
+ main_pool.putconn(main_db_connection)
 
  return {"id": user_id, "message": f"status {name} created."},201
 
@@ -286,6 +236,7 @@ def create_status(current_user):
         if(len(amount) < 2):
             amount = 0
 
+        # find bank DB and Agent ID in main database
         with main_db_connection:
 
             with main_db_connection.cursor() as cursor:
@@ -296,21 +247,35 @@ def create_status(current_user):
                 if row != None:
                     
                     bank_db = row[0]
+
                                 
                 else:   
-                    pool.putconn(main_db_connection)
+                    main_pool.putconn(main_db_connection)
   
                     return {"error": "Client Does Not Exist"},404
+
+
+                # Find Agent ID
+                cursor.execute(SELECT_AGENT_RETURN_ID,(agent,))
+                row = cursor.fetchone()
+                if row != None:
+                    agent_id = row[0]                              
+                else:
+                   
+                    main_pool.putconn(connection)
+
+                    return {"error": "Agent Does Not Exist"},404
+                
+
                     
-
-
-
-        connection = connect_to_bank_database(bank_db)
+        # connect to specific bank_db
+        connection = identify_connection(bank_db)
 
         with connection:
 
             with connection.cursor() as cursor:
                 # Find Client ID
+
                 cursor.execute(SELECT_CH_RETURN_ID,(ch_code,))
                 row = cursor.fetchone()
                 if row != None:
@@ -319,21 +284,12 @@ def create_status(current_user):
                     leads_client_id = row[1]    
                                 
                 else:   
-                    pool.putconn(connection)
-  
+                   
+                    pif_pool.putconn(connection)
+
                     return {"error": "Client Does Not Exist"},404
                     
 
-                # Find Agent ID
-                cursor.execute(SELECT_AGENT_RETURN_ID,(agent,))
-                row = cursor.fetchone()
-                if row != None:
-                    agent_id = row[0]                              
-                else:
-                    pool.putconn(connection)
-  
-                    return {"error": "Agent Does Not Exist"},404
-                
 
                 # Find Status
                 cursor.execute(SELECT_STATUS_RETURN_ID,(leads_client_id,disposition_class,))          
@@ -341,18 +297,19 @@ def create_status(current_user):
                 if row != None:   
                     leads_status_id = row[0]
                 else:
-                    pool.putconn(connection)
-  
+                   
+                    pif_pool.putconn(connection)
+
                     return {"error": "Status Does Not Exist"},404
 
-               
+            
                 cursor.execute(SELECT_SUBSTATUS_RETURN_ID,(leads_status_id,disposition_code,))
                 row = cursor.fetchone()
                 if row != None:
                     leads_substatus_id = row[0]
                 else:
-                    pool.putconn(connection)
-  
+                    pif_pool.putconn(connection)
+
                     return {"error": "Sub Status Does Not Exist"},404
 
                 
@@ -362,17 +319,19 @@ def create_status(current_user):
                     result_id = row[0]
                 
                 else:
-                    pool.putconn(connection)
-  
+                    pif_pool.putconn(connection)
+
                     return {"error": "Error Inserting Data"},404
 
                 
-        pool.putconn(connection)
-  
+
         return {"id": result_id, "message": f"status {ch_code} created."},201
 
+
     except Exception as ex:
-        pool.putconn(connection)
+        main_pool.putconn(main_db_connection)
+
+        pif_pool.putconn(connection)
   
         return {"error": f"{ex}"},400
 
@@ -383,17 +342,40 @@ def create_status(current_user):
 def create_field_status(current_user):
     data = request.get_json()
 
-    connection = connect_to_main_database()
+    main_db_connection = connect_to_main_database()
 
     try:
         ch_code = data["chcode"]
         reference = data["reference"]
         bank = data["bank"]
+        campaign = data["campaign"]
         status = data["status"]
         area = data["area"]
         field_name = data["status"]
         json_data = data["json_data"]
         date_created = data["date_created"]
+
+    # find bank DB and Agent ID in main database
+        with main_db_connection:
+
+            with main_db_connection.cursor() as cursor:
+
+                 # Find Database
+                cursor.execute(SELECT_RDS_DATABASE_RETURN_RDS,(campaign,))
+                row = cursor.fetchone()
+                if row != None:
+                    
+                    bank_db = row[0]
+
+                                
+                else:   
+                    main_pool.putconn(main_db_connection)
+  
+                    return {"error": "Client Does Not Exist"},404
+    
+        # connect to specific bank_db
+        connection = identify_connection(bank_db)
+
 
         with connection:
 
@@ -407,16 +389,16 @@ def create_field_status(current_user):
                     result_id = row[0]
                 
                 else:
-                    pool.putconn(connection)
+                    pif_pool.putconn(connection)
   
                     return {"error": "Error Inserting Data"},404
 
-        pool.putconn(connection)
+        pif_pool.putconn(connection)
   
         return {"id": result_id, "message": f"field status {ch_code} created."},201
     
     except Exception as ex:
-        pool.putconn(connection)
+        pif_pool.putconn(connection)
   
         return {"error": f"{ex}"},400
 
@@ -427,7 +409,7 @@ def create_field_status(current_user):
 def create_agent(current_user):
     data = request.get_json()
 
-    connection = connect_to_main_database()
+    main_db_connection = connect_to_main_database()
 
     try:
         address = data["address"]
@@ -445,9 +427,9 @@ def create_agent(current_user):
         barcode_date_with_tz = datetime.datetime.utcnow()
         barcode_date = barcode_date_with_tz.replace(tzinfo=None)
 
-        with connection:
+        with main_db_connection:
 
-            with connection.cursor() as cursor:
+            with main_db_connection.cursor() as cursor:
                     
 
                 # Find Agent ID
@@ -466,19 +448,19 @@ def create_agent(current_user):
                     result_id = row[0]
                 
                 else:
-                    pool.putconn(connection)
+                    main_pool.putconn(main_db_connection)
   
                     return {"error": "Error Inserting Data"},404
 
                 
 
-        pool.putconn(connection)
+        main_pool.putconn(main_db_connection)
   
         return {"id": result_id, "message": f"status {ch_code} created."},201
 
     except Exception as ex:
 
-        pool.putconn(connection)
+        main_pool.putconn(main_db_connection)
 
         return {"error": f"{ex}"},400
 
