@@ -25,6 +25,39 @@ class LeadResource(Resource):
 
         return {"id": bank_name, "message": f"successfully sync"}, 200
 
+class LeadPulloutResouce(Resource):
+    @token_required
+    @account_etl_required
+    def put(self, current_user):
+
+        if 'db_name' not in request.json or 'ch_code' not in request.json:
+            return {'message': 'db_name and ch_code required.'},400
+        
+        db_name = request.json['db_name']
+        ch_code = request.json['ch_code']
+        
+        with main_db.get_conn() as main_db_conn:
+            cursor = main_db_conn.cursor()
+            cursor.execute(
+                'SELECT db_name from api_db_destinations WHERE db_name = %s', (db_name,))
+            row = cursor.fetchone()
+            if row == None:
+                return {'message': 'Campaign name is not found'}, 400
+            db_bank_name = row[0]
+
+            bank_db = AWSConnection(db_bank_name)
+
+            with bank_db.get_conn() as bank_db_conn:
+                bank_db_cursor = bank_db_conn.cursor()
+
+                bank_db_cursor.execute('UPDATE leads SET leads_deleted = %s, leads_pullout = %s WHERE leads_chcode = %s RETURNING leads_chcode',(1,datetime.datetime.utcnow(),ch_code ))
+    
+                row = bank_db_cursor.fetchone()
+                if row == None:
+                    return {'message': 'Invalid ch_code'},400
+                updated_lead_ch_code = row[0]
+                
+                return {'message': f'leads with ch_code of {updated_lead_ch_code} has been deleted'}
 
 class LeadResultResource(Resource):
     def put(self, id):
