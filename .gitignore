@@ -1,1 +1,3 @@
 /flask/dev.env
+.env
+/flask/__pycache__/
