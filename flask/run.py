@@ -1,6 +1,4 @@
-from app import create_app
 
-app = create_app()
 
 if __name__ == '__main__':
     app.run()
@@ -18,9 +16,7 @@ if __name__ == '__main__':
 # from app.etl_upsert import ETL
 # from app.databases.aws import main_db, AWSConnection
 
-# app = Flask(__name__)
 
-# api_blueprint = Blueprint('api', __name__, url_prefix='/api')
 
 # #  Role ID Level
 # #  admin = 1
