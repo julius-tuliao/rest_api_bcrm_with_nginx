@@ -13,6 +13,6 @@ def create_app():
     api.add_resource(UserLoginResource, '/login')
     api.add_resource(LeadResource, '/get_accounts', '/leads')
     api.add_resource(LeadPulloutResouce, '/leads')
-    api.add_resource(LeadResultResource, '/status/')
+    api.add_resource(LeadResultResource, '/status')
 
     return app

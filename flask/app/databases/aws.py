@@ -22,7 +22,7 @@ class AWSConnection:
         else:
             self.__instances[database_name] = psycopg2.pool.SimpleConnectionPool(
                 1,
-                20,
+                5,
                 host=RDS_DATABASE_HOST,
                 database=database_name,
                 user=RDS_DATABASE_USER,
@@ -34,7 +34,6 @@ class AWSConnection:
 
     def get_conn(self) -> pool.SimpleConnectionPool.getconn:
         conn = self.__connection_pool.getconn()
-        conn.autocommit = True
         return conn
 
     def put_conn(self,connection):

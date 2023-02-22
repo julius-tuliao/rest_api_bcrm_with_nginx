@@ -25,39 +25,56 @@ class LeadResource(Resource):
 
         return {"id": bank_name, "message": f"successfully sync"}, 200
 
+
 class LeadPulloutResouce(Resource):
     @token_required
     @account_etl_required
     def put(self, current_user):
-
         if 'db_name' not in request.json or 'ch_code' not in request.json:
-            return {'message': 'db_name and ch_code required.'},400
-        
+            return {'message': 'db_name and ch_code required.'}, 400
+
         db_name = request.json['db_name']
         ch_code = request.json['ch_code']
-        
-        with main_db.get_conn() as main_db_conn:
-            cursor = main_db_conn.cursor()
-            cursor.execute(
-                'SELECT db_name from api_db_destinations WHERE db_name = %s', (db_name,))
-            row = cursor.fetchone()
-            if row == None:
-                return {'message': 'Campaign name is not found'}, 400
-            db_bank_name = row[0]
 
-            bank_db = AWSConnection(db_bank_name)
-
-            with bank_db.get_conn() as bank_db_conn:
-                bank_db_cursor = bank_db_conn.cursor()
-
-                bank_db_cursor.execute('UPDATE leads SET leads_deleted = %s, leads_pullout = %s WHERE leads_chcode = %s RETURNING leads_chcode',(1,datetime.datetime.utcnow(),ch_code ))
-    
-                row = bank_db_cursor.fetchone()
+        try:
+            with main_db.get_conn() as main_db_conn:
+                cursor = main_db_conn.cursor()
+                cursor.execute(
+                    'SELECT db_name from api_db_destinations WHERE db_name = %s', (db_name,))
+                row = cursor.fetchone()
+                main_db.put_conn(main_db_conn)
                 if row == None:
-                    return {'message': 'Invalid ch_code'},400
-                updated_lead_ch_code = row[0]
-                
-                return {'message': f'leads with ch_code of {updated_lead_ch_code} has been deleted'}
+                    return {'message': 'Campaign name is not found'}, 400
+                db_bank_name = row[0]
+
+                bank_db = AWSConnection(db_bank_name)
+
+                with bank_db.get_conn() as bank_db_conn:
+                    bank_db_cursor = bank_db_conn.cursor()
+
+                    bank_db_cursor.execute(
+                        'UPDATE leads SET leads_deleted = %s, leads_pullout = %s WHERE leads_chcode = %s RETURNING leads_chcode', (1, datetime.datetime.utcnow(), ch_code))
+                    bank_db_conn.commit()
+                    row = bank_db_cursor.fetchone()
+
+                    bank_db.put_conn(bank_db_conn)
+                    if row == None:
+                        return {'message': 'Invalid ch_code'}, 400
+                    updated_lead_ch_code = row[0]
+
+                    return {'message': f'leads with ch_code of {updated_lead_ch_code} has been deleted'}
+        
+        except Exception as ex:
+            print(ex)
+            if main_db_conn:
+                main_db.put_conn(main_db_conn)
+        
+            if bank_db_conn:
+                bank_db.put_conn(bank_db_conn)
+
+            print(ex)
+            return {"error": f"{ex}"}, 400
+
 
 class LeadResultResource(Resource):
     def put(self, id):
@@ -69,8 +86,7 @@ class LeadResultResource(Resource):
 
         data = request.get_json()
 
-        main_db_connection = main_db.get_conn()
-
+        
         try:
             address = data["address"]
             ch_code = data["ch_code"]
@@ -98,98 +114,94 @@ class LeadResultResource(Resource):
                 amount = 0
 
             # find bank DB and Agent ID in main database
-            with main_db_connection:
+            with main_db.get_conn() as main_db_connection:
 
-                with main_db_connection.cursor() as cursor:
+                cursor = main_db_connection.cursor()
+                # Find Database
+                cursor.execute(SELECT_RDS_DATABASE_RETURN_RDS, (campaign,))
+                row = cursor.fetchone()
 
-                    # Find Database
-                    cursor.execute(SELECT_RDS_DATABASE_RETURN_RDS, (campaign,))
-                    row = cursor.fetchone()
+                if row != None:
 
-                    if row != None:
+                    bank_db_name = row[0]
 
-                        bank_db_name = row[0]
+                else:
+                    main_db.put_conn(main_db_connection)
+                    
+                    return {"error": "Client Does Not Exist"}, 404
 
-                    else:
-                        main_db.put_conn(main_db_connection)
+                # Find Agent ID
+                cursor.execute(SELECT_AGENT_RETURN_ID, (agent,))
+                row = cursor.fetchone()
 
-                        return {"error": "Client Does Not Exist"}, 404
+                if row != None:
+                    agent_id = row[0]
+                else:
 
-                    # Find Agent ID
-                    cursor.execute(SELECT_AGENT_RETURN_ID, (agent,))
-                    row = cursor.fetchone()
-
-                    if row != None:
-                        agent_id = row[0]
-                    else:
-
-                        # main_db.put_conn(connection)
-
-                        return {"error": "Agent Does Not Exist"}, 404
+                    main_db.put_conn(main_db_connection)
+                    
+                    return {"error": "Agent Does Not Exist"}, 404
+                
+                main_db.put_conn(main_db_connection)
 
             # connect to specific bank_db_name
             bank_db = AWSConnection(bank_db_name)
-            connection = bank_db.get_conn()
-            with connection:
+            with bank_db.get_conn() as connection:
 
-                with connection.cursor() as cursor:
-                    # Find Client ID
+                cursor = connection.cursor()
+                # Find Client ID
 
-                    cursor.execute(SELECT_CH_RETURN_ID, (ch_code,))
-                    row = cursor.fetchone()
+                cursor.execute(SELECT_CH_RETURN_ID, (ch_code,))
+                row = cursor.fetchone()
 
-                    if row != None:
+                if row != None:
 
-                        leads_id = row[0]
-                        leads_client_id = row[1]
+                    leads_id = row[0]
+                    leads_client_id = row[1]
 
-                    else:
+                else:
 
-                        bank_db.put_conn(connection)
+                    bank_db.put_conn(connection)
+                    return {"error": "Client Does Not Exist"}, 404
 
-                        return {"error": "Client Does Not Exist"}, 404
+                # Find Status
+                cursor.execute(SELECT_STATUS_RETURN_ID,
+                               (leads_client_id, disposition_class,))
+                row = cursor.fetchone()
+                if row != None:
+                    leads_status_id = row[0]
+                else:
+                    bank_db.put_conn(connection)
+                    return {"error": "Status Does Not Exist"}, 404
 
-                    # Find Status
-                    cursor.execute(SELECT_STATUS_RETURN_ID,
-                                   (leads_client_id, disposition_class,))
-                    row = cursor.fetchone()
-                    print(ch_code)
-                    print(row)
-                    if row != None:
-                        leads_status_id = row[0]
-                    else:
+                cursor.execute(SELECT_SUBSTATUS_RETURN_ID,
+                               (leads_status_id, disposition_code,))
+                row = cursor.fetchone()
+                if row != None:
+                    leads_substatus_id = row[0]
+                else:
+                    bank_db.put_conn(connection)
+                    return {"error": "Sub Status Does Not Exist"}, 404
 
-                        bank_db.put_conn(connection)
+                cursor.execute(INSERT_STATUS_RETURN_ID, (leads_id, address, contact, source, start_date, end_date,
+                                                         amount, or_number, comment, agent_id, leads_status_id, leads_substatus_id, barcode_date))
+                connection.commit()
+                row = cursor.fetchone()
+                bank_db.put_conn(connection)
+                if row != None:
+                    result_id = row[0]
 
-                        return {"error": "Status Does Not Exist"}, 404
-
-                    cursor.execute(SELECT_SUBSTATUS_RETURN_ID,
-                                   (leads_status_id, disposition_code,))
-                    row = cursor.fetchone()
-                    if row != None:
-                        leads_substatus_id = row[0]
-                    else:
-                        bank_db.put_conn(connection)
-
-                        return {"error": "Sub Status Does Not Exist"}, 404
-
-                    cursor.execute(INSERT_STATUS_RETURN_ID, (leads_id, address, contact, source, start_date, end_date,
-                                                             amount, or_number, comment, agent_id, leads_status_id, leads_substatus_id, barcode_date))
-                    row = cursor.fetchone()
-
-                    if row != None:
-                        result_id = row[0]
-
-                    else:
-                        bank_db.put_conn(connection)
-
-                        return {"error": "Error Inserting Data"}, 404
+                else:
+                    
+                    return {"error": "Error Inserting Data"}, 404
 
             return {"id": result_id, "message": f"status {ch_code} created."}, 201
 
         except Exception as ex:
-            main_db.put_conn(main_db_connection)
+            if connection:
+                bank_db.put_conn(connection)
 
-            bank_db.put_conn(connection)
-
+            if main_db_connection:
+                main_db.put_conn(main_db_connection)
+            print(ex)
             return {"error": f"{ex}"}, 400
