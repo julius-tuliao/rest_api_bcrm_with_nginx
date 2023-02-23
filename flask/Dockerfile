@@ -1,5 +1,5 @@
 # Step 1: Import the Os
-from python:3.8-alpine
+FROM python:3.8-alpine
 
 # Step 2: Install pip and Python Dependencies
 RUN apk add --no-cache gcc libc-dev linux-headers
