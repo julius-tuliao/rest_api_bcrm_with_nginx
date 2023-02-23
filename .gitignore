@@ -1,5 +1,15 @@
 
-/flask/dev.env
 /flask/.env
 /flask/.venv
 /flask/__pycache__
+/flask/databases/__pycache__
+/flask/models/__pycache__
+/flask/resouces/__pycache__
+/flask/utils/__pycache__
+
+*.pyc
+.env
+
+/flask_app/.env
+**/__pycache__/
+*.pyc
