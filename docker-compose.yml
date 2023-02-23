@@ -7,7 +7,7 @@ services:
     container_name: flask
     restart: always
     env_file:
-      - ./flask/dev.env
+      - ./flask/.env
     expose:
       - 8080
 
