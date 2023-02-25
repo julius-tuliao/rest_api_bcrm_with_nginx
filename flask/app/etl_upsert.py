@@ -13,7 +13,7 @@ class ETL:
         SELECT_AMEYO_RECORDS = "SELECT ch_code,ch_name,account_number,principal,endorsement_date,\
                 cutoff_date,address1,address2,address3,address4,address5,phone1,phone2,phone3,new_contact,\
                 new_email_address,agent,date_added,account_information,additional_information FROM customer \
-                Where LENGTH(ch_code) > 0 AND LENGTH(ch_name) > 0 AND LENGTH(outstanding_balance) > 0 AND LENGTH(account_number) > 0 AND (updatedon::date > current_date - interval '1500 HOURS' or date_added > current_date - interval '24 HOURS') "
+                Where LENGTH(ch_code) > 0 AND LENGTH(ch_name) > 0 AND LENGTH(outstanding_balance) > 0 AND LENGTH(account_number) > 0 AND (updatedon::date > current_date - interval '750 HOURS' or date_added > current_date - interval '24 HOURS') "
         SELECT_USER_ID = "SELECT users_id FROM users WHERE users_username = %s"
         SELECT_IF_ROW_EXIST = "SELECT leads_chcode FROM leads WHERE leads_chcode = %s"  
         INSERT_ETL_LEADS = "INSERT INTO public.leads ( leads_client_id, leads_users_id, \
