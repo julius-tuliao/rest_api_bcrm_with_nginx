@@ -2,28 +2,37 @@ import datetime
 from flask_restful import Resource, request
 from app.utils import account_etl_required, token_required, agent_status_required
 from app.etl_upsert import ETL
-from app.databases.aws import AWSConnection, main_db
+from app.databases.aws import AWSConnectionPool, main_db
 SELECT_RDS_DATABASE_RETURN_RDS = "SELECT rds_db_name FROM campaigns WHERE campaign_id = (%s) LIMIT 1"
 SELECT_AGENT_RETURN_ID = "SELECT users_id FROM users WHERE users_username = (%s) ORDER BY users_id DESC LIMIT 1  "
 SELECT_CH_RETURN_ID = "SELECT leads_id,leads_client_id FROM leads WHERE leads_chcode = (%s) LIMIT 1"
 SELECT_STATUS_RETURN_ID = "SELECT leads_status_id FROM leads_status WHERE leads_status_client_id = (%s) AND leads_status_name = (%s) AND leads_status_deleted = 0  LIMIT 1"
 SELECT_SUBSTATUS_RETURN_ID = "SELECT leads_substatus_id FROM leads_substatus WHERE leads_substatus_status_id = (%s) AND leads_substatus_name = (%s) AND leads_substatus_deleted = 0 LIMIT 1"
 INSERT_STATUS_RETURN_ID = "INSERT INTO leads_result (leads_result_lead,leads_result_address,leads_result_contact,leads_result_source,leads_result_sdate,leads_result_edate,leads_result_amount,leads_result_ornumber,leads_result_comment,leads_result_users,leads_result_status_id,leads_result_substatus_id,leads_result_barcode_date) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING leads_result_id;"
-
+class HttpException(Exception):
+    def __init__(self, status, message, data=None):
+        self.status = status
+        self.message = message
+        self.data = data
+from app.services.lead import ETLLead
 
 class LeadResource(Resource):
     @token_required
     @account_etl_required
     def post(self, current_user):
-        bank_name = request.json['bank_name']
+        try:
+            compain_name = request.json['compain_name']
+            # create etl lead instance
+            etl_lead = ETLLead(compain_name)
 
-        # Create an ETL object
-        etl = ETL()
+            # Call the replicate() method
+            etl_lead.replicate()
 
-        # Call the replicate() method
-        etl.replicate(bank_name)
+            return {"id": compain_name, "message": f"successfully sync"}, 200
+        except Exception as ex:
+            print(ex)
+            return {"error": f"{ex}"}, 400
 
-        return {"id": bank_name, "message": f"successfully sync"}, 200
 
 
 class LeadPulloutResouce(Resource):
@@ -37,19 +46,18 @@ class LeadPulloutResouce(Resource):
         ch_code = request.json['ch_code']
 
         try:
-            with main_db.get_conn() as main_db_conn:
+            with main_db as main_db_conn:
                 cursor = main_db_conn.cursor()
                 cursor.execute(
                     'SELECT db_name from api_db_destinations WHERE db_name = %s', (db_name,))
                 row = cursor.fetchone()
-                main_db.put_conn(main_db_conn)
                 if row == None:
                     return {'message': 'Campaign name is not found'}, 400
                 db_bank_name = row[0]
 
-                bank_db = AWSConnection(db_bank_name)
-
-                with bank_db.get_conn() as bank_db_conn:
+                bank_db = AWSConnectionPool(db_bank_name)
+                
+                with bank_db as bank_db_conn:
                     bank_db_cursor = bank_db_conn.cursor()
 
                     bank_db_cursor.execute(
@@ -57,7 +65,6 @@ class LeadPulloutResouce(Resource):
                     bank_db_conn.commit()
                     row = bank_db_cursor.fetchone()
 
-                    bank_db.put_conn(bank_db_conn)
                     if row == None:
                         return {'message': 'Invalid ch_code'}, 400
                     updated_lead_ch_code = row[0]
@@ -65,13 +72,6 @@ class LeadPulloutResouce(Resource):
                     return {'message': f'leads with ch_code of {updated_lead_ch_code} has been deleted'}
         
         except Exception as ex:
-            print(ex)
-            if main_db_conn:
-                main_db.put_conn(main_db_conn)
-        
-            if bank_db_conn:
-                bank_db.put_conn(bank_db_conn)
-
             print(ex)
             return {"error": f"{ex}"}, 400
 
@@ -114,7 +114,7 @@ class LeadResultResource(Resource):
                 amount = 0
 
             # find bank DB and Agent ID in main database
-            with main_db.get_conn() as main_db_connection:
+            with main_db as main_db_connection:
 
                 cursor = main_db_connection.cursor()
                 # Find Database
@@ -126,8 +126,6 @@ class LeadResultResource(Resource):
                     bank_db_name = row[0]
 
                 else:
-                    main_db.put_conn(main_db_connection)
-                    
                     return {"error": "Client Does Not Exist"}, 404
 
                 # Find Agent ID
@@ -137,18 +135,13 @@ class LeadResultResource(Resource):
                 if row != None:
                     agent_id = row[0]
                 else:
-
-                    main_db.put_conn(main_db_connection)
-                    
                     return {"error": "Agent Does Not Exist"}, 404
                 
-                main_db.put_conn(main_db_connection)
-
             # connect to specific bank_db_name
-            bank_db = AWSConnection(bank_db_name)
-            with bank_db.get_conn() as connection:
+            bank_db = AWSConnectionPool(bank_db_name)
+            with bank_db as bank_db_conn:
 
-                cursor = connection.cursor()
+                cursor = bank_db_conn.cursor()
                 # Find Client ID
 
                 cursor.execute(SELECT_CH_RETURN_ID, (ch_code,))
@@ -161,7 +154,6 @@ class LeadResultResource(Resource):
 
                 else:
 
-                    bank_db.put_conn(connection)
                     return {"error": "Client Does Not Exist"}, 404
 
                 # Find Status
@@ -171,7 +163,6 @@ class LeadResultResource(Resource):
                 if row != None:
                     leads_status_id = row[0]
                 else:
-                    bank_db.put_conn(connection)
                     return {"error": "Status Does Not Exist"}, 404
 
                 cursor.execute(SELECT_SUBSTATUS_RETURN_ID,
@@ -180,14 +171,12 @@ class LeadResultResource(Resource):
                 if row != None:
                     leads_substatus_id = row[0]
                 else:
-                    bank_db.put_conn(connection)
                     return {"error": "Sub Status Does Not Exist"}, 404
 
                 cursor.execute(INSERT_STATUS_RETURN_ID, (leads_id, address, contact, source, start_date, end_date,
                                                          amount, or_number, comment, agent_id, leads_status_id, leads_substatus_id, barcode_date))
-                connection.commit()
+                bank_db_conn.commit()
                 row = cursor.fetchone()
-                bank_db.put_conn(connection)
                 if row != None:
                     result_id = row[0]
 
@@ -198,10 +187,5 @@ class LeadResultResource(Resource):
             return {"id": result_id, "message": f"status {ch_code} created."}, 201
 
         except Exception as ex:
-            if connection:
-                bank_db.put_conn(connection)
-
-            if main_db_connection:
-                main_db.put_conn(main_db_connection)
             print(ex)
             return {"error": f"{ex}"}, 400

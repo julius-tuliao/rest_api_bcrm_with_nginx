@@ -17,7 +17,7 @@ if __name__ == ('__main__'):
 # import jwt
 # from flask import Flask, request, jsonify, make_response
 # from app.etl_upsert import ETL
-# from app.databases.aws import main_db, AWSConnection
+# from app.databases.aws import main_db, AWSConnectionPool
 
 
 
@@ -50,7 +50,7 @@ if __name__ == ('__main__'):
 # def create_field_status(current_user):
 #     data = request.get_json()
 
-#     main_db_connection = main_db.get_conn()
+#     main_db_connection = main_db.getconn()
 
 #     try:
 #         ch_code = data["chcode"]
@@ -76,13 +76,13 @@ if __name__ == ('__main__'):
 #                     bank_db_name = row[0]
 
 #                 else:
-#                     main_db.put_conn(main_db_connection)
+#                     main_db.putconn(main_db_connection)
 
 #                     return {"error": "Client Does Not Exist"}, 404
 
 #         # connect to specific bank_db_name
-#         bank_db = AWSConnection(bank_db_name)
-#         connection = bank_db.get_conn()
+#         bank_db = AWSConnectionPool(bank_db_name)
+#         connection = bank_db.getconn()
 
 #         with connection:
 
@@ -97,16 +97,16 @@ if __name__ == ('__main__'):
 #                     result_id = row[0]
 
 #                 else:
-#                     bank_db.put_conn(connection)
+#                     bank_db.putconn(connection)
 
 #                     return {"error": "Error Inserting Data"}, 404
 
-#         bank_db.put_conn(connection)
+#         bank_db.putconn(connection)
 
 #         return {"id": result_id, "message": f"field status {ch_code} created."}, 201
 
 #     except Exception as ex:
-#         bank_db.put_conn(connection)
+#         bank_db.putconn(connection)
 
 #         return {"error": f"{ex}"}, 400
 
@@ -119,7 +119,7 @@ if __name__ == ('__main__'):
 #         data = request.get_json()
 #         ch_code = data['ch_code']
 #         bank_name = data['bank_name']
-#         main_db_connection = main_db.get_conn()
+#         main_db_connection = main_db.getconn()
 
 #         with main_db_connection:
 
@@ -131,13 +131,13 @@ if __name__ == ('__main__'):
 #                     bank_db_name = row[0]
 
 #                 else:
-#                     main_db.put_conn(main_db_connection)
+#                     main_db.putconn(main_db_connection)
 
 #                     return {"error": "Bank name does not exist"}, 404
 
 #                 # connect to specific bank_db_name
-#                 bank_db = AWSConnection(bank_db_name)
-#                 connection = bank_db.get_conn()
+#                 bank_db = AWSConnectionPool(bank_db_name)
+#                 connection = bank_db.getconn()
 #                 with connection:
 
 #                     with connection.cursor() as cursor:
@@ -196,18 +196,18 @@ if __name__ == ('__main__'):
 # #                     result_id = row[0]
 
 # #                 else:
-# #                     main_db.put_conn(main_db_connection)
+# #                     main_db.putconn(main_db_connection)
 
 # #                     return {"error": "Error Inserting Data"},404
 
 
-# #         main_db.put_conn(main_db_connection)
+# #         main_db.putconn(main_db_connection)
 
 # #         return {"id": result_id, "message": f"status {ch_code} created."},201
 
 # #     except Exception as ex:
 
-# #         main_db.put_conn(main_db_connection)
+# #         main_db.putconn(main_db_connection)
 
 # #         return {"error": f"{ex}"},400
 

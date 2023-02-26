@@ -22,7 +22,7 @@ class UserResource(Resource):
         name = data["name"]
         role = data["role"]
 
-        main_db_connection = main_db.get_conn()
+        main_db_connection = main_db.getconn()
 
         with main_db_connection:
 
@@ -30,17 +30,17 @@ class UserResource(Resource):
 
                 cursor.execute(
                     'SELECT name FROM api_users WHERE name = %s', (name,))
-                user_exist = cursor.fetchone()[0]
+                user_exist = cursor.fetchone()
                 if user_exist:
                     cursor.close()
-                    main_db.put_conn(main_db_connection)
+                    main_db.putconn(main_db_connection)
                     return {"message": f"Username {name} already exist."}, 400
 
                 cursor.execute(REGISTER_USER_RETURN_ID, (str(
                     uuid.uuid4()), name, hashed_password, role,))
                 user_id = cursor.fetchone()[0]
 
-        main_db.put_conn(main_db_connection)
+        main_db.putconn(main_db_connection)
 
         return {"id": user_id, "message": f"status {name} created."}, 201
 
@@ -48,26 +48,27 @@ class UserResource(Resource):
 class UserLoginResource(Resource):
     def post(self):
 
-        auth = request.authorization
+        try:
+            auth = request.authorization
 
-        connection = main_db.get_conn()
+            if not auth or not auth.username or not auth.password:
+                return make_response('could not verify', 401, {'WWW.Authentication': 'Basic realm: "login required"'})
 
-        if not auth or not auth.username or not auth.password:
-            return make_response('could not verify', 401, {'WWW.Authentication': 'Basic realm: "login required"'})
+            with main_db as conn:
 
-        with connection:
-
-            with connection.cursor() as cursor:
+                cursor = conn.cursor()
                 cursor.execute(SELECT_USER_BY_USER_AND_PASS, (auth.username,))
                 user = cursor.fetchone()
 
-        main_db.put_conn(connection)
 
-        if check_password_hash(user[3], auth.password):
+                if check_password_hash(user[3], auth.password):
 
-            token = jwt.encode({'public_id': user[1], 'exp': datetime.datetime.utcnow(
-            ) + datetime.timedelta(minutes=300)}, SECRET_KEY)
+                    token = jwt.encode({'public_id': user[1], 'exp': datetime.datetime.utcnow(
+                    ) + datetime.timedelta(minutes=300)}, SECRET_KEY)
 
-            return jsonify({'token': token})
+                    return jsonify({'token': token})
 
-        return make_response('could not verify',  401, {'WWW.Authentication': 'Basic realm: "login required"'})
+            return make_response('could not verify',  401, {'WWW.Authentication': 'Basic realm: "login required"'})
+        except Exception as ex:
+            print(ex)
+            return make_response('could not verify',  401, {'WWW.Authentication': 'Basic realm: "login required"'})

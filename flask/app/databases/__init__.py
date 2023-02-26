@@ -1,7 +1,7 @@
-from .aws import AWSConnection,main_db
-from .ameyo import AMEYOConnection
+from .aws import AWSConnectionPool,main_db
+from .ameyo import AMEYOConnectionPool
 
-__all__ = [AWSConnection, AMEYOConnection, main_db]
+__all__ = [AWSConnectionPool, AMEYOConnectionPool, main_db]
 
 
 

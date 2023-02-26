@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_restful import Api
 from .config import SECRET_KEY
 from app.resources import UserResource, LeadResource, UserLoginResource, LeadResultResource, LeadPulloutResouce
@@ -7,7 +7,7 @@ from app.resources import UserResource, LeadResource, UserLoginResource, LeadRes
 def create_app():
     app = Flask(__name__)
     app.secret_key = SECRET_KEY
-    api = Api(app, prefix='/api')
+    api = Api(app, prefix='/api',catch_all_404s=True)
 
     api.add_resource(UserResource, '/register')
     api.add_resource(UserLoginResource, '/login')

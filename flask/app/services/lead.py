@@ -2,61 +2,60 @@ import psycopg2.extras
 import json
 from datetime import datetime
 
-from .databases.ameyo import AMEYOConnectionPool
-from .databases.aws import AWSConnectionPool,main_db
+from app.databases.ameyo import AMEYOConnectionPool
+from app.databases.aws import AWSConnectionPool,main_db
 
-class ETL:
-    def replicate(self, bank_name):
-        # QUERIES  
-        # SELECT_BANK_NAME = "SELECT db_name,client_id FROM sources WHERE bank_name = %s"
-        SELECT_SOURCE_AND_DESTINATION = "SELECT  source.db_name AS source_db_name, destination.db_name AS destination_db_name,destination.client_id FROM api_db_destinations AS destination INNER JOIN api_db_sources AS source ON destination.id = source.api_db_destination_id WHERE destination.campaign_name = %s"
-        SELECT_AMEYO_RECORDS = "SELECT ch_code,ch_name,account_number,principal,endorsement_date,\
-                cutoff_date,address1,address2,address3,address4,address5,phone1,phone2,phone3,new_contact,\
-                new_email_address,agent,date_added,account_information,additional_information FROM customer \
-                Where LENGTH(ch_code) > 0 AND LENGTH(ch_name) > 0 AND LENGTH(outstanding_balance) > 0 AND LENGTH(account_number) > 0 AND (updatedon::date > current_date - interval '150000 HOURS' or date_added > current_date - interval '24 HOURS') "
-        SELECT_USER_ID = "SELECT users_id FROM users WHERE users_username = %s"
-        SELECT_IF_ROW_EXIST = "SELECT leads_chcode FROM leads WHERE leads_chcode = %s"  
-        INSERT_ETL_LEADS = "INSERT INTO public.leads ( leads_client_id, leads_users_id, \
-                            leads_acctno, leads_chcode, leads_chname, leads_prin, leads_interest, \
-                            leads_endo_date, leads_lpd, leads_lpa, leads_cycle, \
-                            leads_credit_limit, leads_type_product, leads_work_phone, leads_ob, \
-                            leads_new_ob, leads_full_address, leads_address1, leads_address2, leads_address3,\
-                            leads_address4,leads_phone, leads_email, leads_employer, leads_birthday,\
-                            leads_mobile_phone, leads_cutoff, leads_new_cutoff, leads_full_saddress, leads_full_taddress, \
-                            leads_new_address, leads_new_contact, leads_spo,leads_ts,leads_placement) \
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,\
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, \
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING leads_id"
-        
-        UPDATE_ETL_LEADS = "UPDATE public.leads SET leads_client_id=%s, leads_users_id=%s, \
-                            leads_acctno=%s, leads_chcode=%s, leads_chname=%s, leads_prin=%s, leads_interest=%s, \
-                            leads_endo_date=%s, leads_lpd=%s, leads_lpa=%s, leads_cycle=%s, \
-                            leads_credit_limit=%s, leads_type_product=%s, leads_work_phone=%s, leads_ob=%s, \
-                            leads_new_ob=%s, leads_full_address=%s, leads_address1=%s, leads_address2=%s, leads_address3=%s,\
-                            leads_address4=%s,leads_phone=%s, leads_email=%s, leads_employer=%s, leads_birthday=%s,\
-                            leads_mobile_phone=%s, leads_cutoff=%s, leads_new_cutoff=%s, leads_full_saddress=%s, leads_full_taddress=%s, \
-                            leads_new_address=%s, leads_new_contact=%s, leads_spo=%s,leads_ts=%s,leads_placement=%s \
-                            WHERE leads_chcode=%s RETURNING leads_id"
+class ETLLead:
+    # QUERIES  
+    # SELECT_BANK_NAME = "SELECT db_name,client_id FROM sources WHERE bank_name = %s"
+    __SELECT_SOURCE_AND_DESTINATION = "SELECT  source.db_name AS source_db_name, destination.db_name AS destination_db_name,destination.client_id FROM api_db_destinations AS destination INNER JOIN api_db_sources AS source ON destination.id = source.api_db_destination_id WHERE destination.campaign_name = %s"
+    __SELECT_AMEYO_RECORDS = "SELECT ch_code,ch_name,account_number,principal,endorsement_date,\
+            cutoff_date,address1,address2,address3,address4,address5,phone1,phone2,phone3,new_contact,\
+            new_email_address,agent,date_added,account_information,additional_information FROM customer \
+            Where LENGTH(ch_code) > 0 AND LENGTH(ch_name) > 0 AND LENGTH(outstanding_balance) > 0 AND LENGTH(account_number) > 0 AND (updatedon::date > current_date - interval '150000 HOURS' or date_added > current_date - interval '24 HOURS') "
+    __SELECT_USER_ID = "SELECT users_id FROM users WHERE users_username = %s"
+    __SELECT_IF_ROW_EXIST = "SELECT leads_chcode FROM leads WHERE leads_chcode = %s"  
+    __INSERT_ETL_LEADS = "INSERT INTO public.leads ( leads_client_id, leads_users_id, \
+                        leads_acctno, leads_chcode, leads_chname, leads_prin, leads_interest, \
+                        leads_endo_date, leads_lpd, leads_lpa, leads_cycle, \
+                        leads_credit_limit, leads_type_product, leads_work_phone, leads_ob, \
+                        leads_new_ob, leads_full_address, leads_address1, leads_address2, leads_address3,\
+                        leads_address4,leads_phone, leads_email, leads_employer, leads_birthday,\
+                        leads_mobile_phone, leads_cutoff, leads_new_cutoff, leads_full_saddress, leads_full_taddress, \
+                        leads_new_address, leads_new_contact, leads_spo,leads_ts,leads_placement) \
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,\
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, \
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING leads_id"
+    
+    __UPDATE_ETL_LEADS = "UPDATE public.leads SET leads_client_id=%s, leads_users_id=%s, \
+                        leads_acctno=%s, leads_chcode=%s, leads_chname=%s, leads_prin=%s, leads_interest=%s, \
+                        leads_endo_date=%s, leads_lpd=%s, leads_lpa=%s, leads_cycle=%s, \
+                        leads_credit_limit=%s, leads_type_product=%s, leads_work_phone=%s, leads_ob=%s, \
+                        leads_new_ob=%s, leads_full_address=%s, leads_address1=%s, leads_address2=%s, leads_address3=%s,\
+                        leads_address4=%s,leads_phone=%s, leads_email=%s, leads_employer=%s, leads_birthday=%s,\
+                        leads_mobile_phone=%s, leads_cutoff=%s, leads_new_cutoff=%s, leads_full_saddress=%s, leads_full_taddress=%s, \
+                        leads_new_address=%s, leads_new_contact=%s, leads_spo=%s,leads_ts=%s,leads_placement=%s \
+                        WHERE leads_chcode=%s RETURNING leads_id"
 
-        SELECT_DYNAMIC_ID = "SELECT dynamic_id FROM dynamic WHERE dynamic_client_id = %s AND dynamic_system_name = %s"
+    __SELECT_DYNAMIC_ID = "SELECT dynamic_id FROM dynamic WHERE dynamic_client_id = %s AND dynamic_system_name = %s"
 
-        INSERT_DYNAMIC_ROW = "INSERT INTO public.dynamic_value(dynamic_value_lead_id, dynamic_value_dynamic_id, dynamic_value_name) VALUES (%s, %s, %s) ON CONFLICT (dynamic_value_lead_id, dynamic_value_dynamic_id) DO UPDATE SET dynamic_value_name = EXCLUDED.dynamic_value_name"
-
-
-        # Get source and destination db
+    __INSERT_DYNAMIC_ROW = "INSERT INTO public.dynamic_value(dynamic_value_lead_id, dynamic_value_dynamic_id, dynamic_value_name) VALUES (%s, %s, %s) ON CONFLICT (dynamic_value_lead_id, dynamic_value_dynamic_id) DO UPDATE SET dynamic_value_name = EXCLUDED.dynamic_value_name"
+    def __init__(self,campaign_name):
+        self.campain_name = campaign_name
+    
+    def replicate(self):
         try:
-           with main_db as main_db_conn:
+            # Get source and destination db
+            with main_db as main_db_conn:
                 main_db_cursor = main_db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-                main_db_cursor.execute( SELECT_SOURCE_AND_DESTINATION, (bank_name,))
+                main_db_cursor.execute( self.__SELECT_SOURCE_AND_DESTINATION, (self.campain_name,))
 
                 destination_and_sources = main_db_cursor.fetchall()
-                # main_db.putconn(main_db_conn)
 
                 destination_db_name = destination_and_sources[0]['destination_db_name']
-
+                
                 # Connect to the destination database
                 with AWSConnectionPool(destination_db_name) as destination_db_conn:
-                 
                     destination_db_cursor = destination_db_conn.cursor()
 
                     # Loop through each source database
@@ -69,7 +68,7 @@ class ETL:
                             source_db_cursor = source_db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
                             # Execute a SELECT query to retrieve the data
-                            source_db_cursor.execute(SELECT_AMEYO_RECORDS)
+                            source_db_cursor.execute(self.__SELECT_AMEYO_RECORDS)
                             data = source_db_cursor.fetchall()
 
                             # filter_complete_data the data (if necessary)
@@ -136,7 +135,7 @@ class ETL:
                                 new_ob = self.remove_non_numeric(new_ob_text)
 
                                 # Retrieve the user ID for the agent name
-                                destination_db_cursor.execute( SELECT_USER_ID, (agent_code,))
+                                destination_db_cursor.execute( self.__SELECT_USER_ID, (agent_code,))
                                 user = destination_db_cursor.fetchone()
 
                                 if user is not None:
@@ -145,7 +144,7 @@ class ETL:
                                     
 
                                     # Check if the row already exists in the table
-                                    destination_db_cursor.execute(SELECT_IF_ROW_EXIST, (ch_code,))
+                                    destination_db_cursor.execute(self.__SELECT_IF_ROW_EXIST, (ch_code,))
                                     
 
                                     # Get the current time
@@ -157,7 +156,7 @@ class ETL:
                                     if destination_db_cursor.fetchone() is None:
 
                                         # Row does not exist, perform an INSERT
-                                        destination_db_cursor.execute(INSERT_ETL_LEADS, 
+                                        destination_db_cursor.execute(self.__INSERT_ETL_LEADS, 
                                             (client_id,user_id,acct_number,ch_code,ch_name,principal,interest,endo_date,lpd, \
                                             lpa, cycle,credit_limit,product_type,work_phone,ob,new_ob,primary_add,address1,address2,address3,address4,\
                                             phone1,email,employer,birthday,mobile_phone,new_cutoff,new_cutoff,secondary_add,tertiary_add, \
@@ -173,19 +172,19 @@ class ETL:
 
                                                 if value != None:   
 
-                                                    destination_db_cursor.execute(SELECT_DYNAMIC_ID,(client_id,key))
+                                                    destination_db_cursor.execute(self.__SELECT_DYNAMIC_ID,(client_id,key))
 
                                                     if destination_db_cursor.rowcount > 0:
                                                         dynamic_id = destination_db_cursor.fetchone()[0]
 
-                                                        destination_db_cursor.execute(INSERT_DYNAMIC_ROW,(leads_id,dynamic_id,value))                     
+                                                        destination_db_cursor.execute(self.__INSERT_DYNAMIC_ROW,(leads_id,dynamic_id,value))                     
 
                                     
                                     else:
 
                                         # Row exists, perform an UPDATE
                                         # destination_db_cursor.execute(f"UPDATE leads SET column1 = %s, column2 = %s WHERE ch_code = %s", (other_columns[0], other_columns[1], ch_code))
-                                        destination_db_cursor.execute(UPDATE_ETL_LEADS, 
+                                        destination_db_cursor.execute(self.__UPDATE_ETL_LEADS, 
                                             (client_id,user_id,acct_number,ch_code,ch_name,principal,interest,endo_date,lpd, \
                                             lpa, cycle,credit_limit,product_type,work_phone,ob,new_ob,primary_add,address1,address2,address3,address4,\
                                             phone1,email,employer,birthday,mobile_phone,new_cutoff,new_cutoff,secondary_add,tertiary_add, \
@@ -202,19 +201,20 @@ class ETL:
                                                 value = row[key]
 
                                                 if value != None:   
-                                                    destination_db_cursor.execute(SELECT_DYNAMIC_ID,(client_id,key))
+                                                    destination_db_cursor.execute(self.__SELECT_DYNAMIC_ID,(client_id,key))
 
                                                     
                                                     if destination_db_cursor.rowcount > 0:
                                                         dynamic_id = destination_db_cursor.fetchone()[0]
 
-                                                        destination_db_cursor.execute(INSERT_DYNAMIC_ROW,(leads_id,dynamic_id,value))                     
+                                                        destination_db_cursor.execute(self.__INSERT_DYNAMIC_ROW,(leads_id,dynamic_id,value))                     
                     
                     # Commit the changes to the database
                     destination_db_conn.commit()
         except Exception as ex:
             print(ex)
-            raise Exception(ex)
+            raise Exception(ex)    
+
 
     def filter_complete_data(self,data):
         # Filter out rows with blank values in the ch_code, ch_name, or account_information columns
