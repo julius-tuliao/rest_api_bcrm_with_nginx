@@ -1,7 +1,6 @@
 import datetime
 from flask_restful import Resource, request
 from app.utils import account_etl_required, token_required, agent_status_required
-from app.etl_upsert import ETL
 from app.databases.aws import AWSConnectionPool, main_db
 SELECT_RDS_DATABASE_RETURN_RDS = "SELECT rds_db_name FROM campaigns WHERE campaign_id = (%s) LIMIT 1"
 SELECT_AGENT_RETURN_ID = "SELECT users_id FROM users WHERE users_username = (%s) ORDER BY users_id DESC LIMIT 1  "
@@ -138,8 +137,7 @@ class LeadResultResource(Resource):
                     return {"error": "Agent Does Not Exist"}, 404
                 
             # connect to specific bank_db_name
-            bank_db = AWSConnectionPool(bank_db_name)
-            with bank_db as bank_db_conn:
+            with AWSConnectionPool(bank_db_name) as bank_db_conn:
 
                 cursor = bank_db_conn.cursor()
                 # Find Client ID
@@ -187,10 +185,5 @@ class LeadResultResource(Resource):
             return {"id": result_id, "message": f"status {ch_code} created."}, 201
 
         except Exception as ex:
-            if connection:
-                bank_db.put_conn(connection)
-
-            if main_db_connection:
-                main_db.put_conn(main_db_connection)
             print(ex)
             return {"error": f"{ex}"}, 400
