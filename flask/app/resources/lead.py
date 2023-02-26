@@ -187,5 +187,10 @@ class LeadResultResource(Resource):
             return {"id": result_id, "message": f"status {ch_code} created."}, 201
 
         except Exception as ex:
+            if connection:
+                bank_db.put_conn(connection)
+
+            if main_db_connection:
+                main_db.put_conn(main_db_connection)
             print(ex)
             return {"error": f"{ex}"}, 400
